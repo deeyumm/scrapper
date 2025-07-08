@@ -1,51 +1,45 @@
 from playwright.sync_api import sync_playwright
-import pandas as pd
 import time
+import csv
 
-mall_urls = []
+all_mall_links = []
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=False)
+    browser = p.chromium.launch(headless=False)  # You can change to True if you don't want to see the browser
     page = browser.new_page()
+    page.set_default_timeout(60000)  # set default timeout to 60 seconds
 
-    for pg in range(1, 5):  # There are 4 pages
+    for pg in range(1, 5):
+        url = f"https://www.scai.in/member-malls/page/{pg}/"
         print(f"\n Visiting page {pg}...")
-        page.goto(f"https://www.scai.in/member-malls/page/{pg}/")
-        time.sleep(3)  # Wait for page content to load
+        page.goto(url)
 
-        page.mouse.wheel(0, 1000)  # Scroll just a little to trigger lazy loading
-        time.sleep(2)
-
-        cards = page.locator(".elementor-post")  # Each mall card
-        total = cards.count()
-        print(f" Found {total} cards on this page.")
-
-        for i in range(total):
-            card = cards.nth(i)
-
-            # Check if this card has an image to hover
-            image = card.locator("img")
-            if image.count() == 0:
-                print(f" Skipping card {i+1} (no image)")
-                continue
-
-            print(f"➡ Hovering over card {i+1} on page {pg}...")
-            card.hover()
+        # Scroll slowly to load content (especially images & links)
+        for _ in range(10):
+            page.mouse.wheel(0, 1000)
             time.sleep(0.5)
 
-            # Try to get the link after hovering
-            link = card.locator("a.elementor-post__thumbnail__link")
-            if link.count() > 0:
+        try:
+            page.wait_for_selector("h3.portfolio-title a", timeout=15000)
+            title_links = page.query_selector_all("h3.portfolio-title a")
+            print(f" Found {len(title_links)} malls on this page.")
+
+            for link in title_links:
                 href = link.get_attribute("href")
                 if href:
-                    print(f"Found link: {href}")
-                    mall_urls.append(href)
-            else:
-                print(f" No clickable icon on card {i+1}")
+                    all_mall_links.append(href)
+
+        except Exception as e:
+            print(f" Skipping page {pg} due to error: {e}")
 
     browser.close()
 
-# Save all found mall URLs
-df = pd.DataFrame({"mall_url": mall_urls})
-df.to_csv("Mall_Links_From_SCAI.csv", index=False)
-print(f"\n Done! Extracted {len(mall_urls)} mall links across all pages.")
+# Save to CSV
+csv_file = "Mall_Links_From_SCAI.csv"
+with open(csv_file, "w", newline='', encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(["Mall_Link"])
+    for mall_link in all_mall_links:
+        writer.writerow([mall_link])
+
+print(f"\n Done! Extracted {len(all_mall_links)} mall links and saved to '{csv_file}'.")
